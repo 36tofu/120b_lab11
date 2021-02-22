@@ -90,6 +90,7 @@ const unsigned char tasksNum = 1;
 const unsigned long tasksPeriodGCD = 1;
 const unsigned long periodKP = 50;
 const unsigned long periodP1 = 100;
+const unsigned long periodP2 = 100;
 const unsigned long periodIS = 100;
 const unsigned long periodSample = 200;
 
@@ -107,7 +108,7 @@ enum P1_States { P1_SMStart,P1_init, P1_inc, P1_dec};
 int TickFct_P1(int state);
 
 enum P2_States { P2_SMStart,P2_init, P2_inc, P2_dec};
-int TickFct_P1(int state);
+int TickFct_P2(int state);
 /*
 enum SQ_States { SQ_SMStart, SQ_init, SQ_begin, SQ_wait, SQ_check, SQ_match };
 int TickFct_detectSQ(int state);
@@ -139,6 +140,16 @@ void TimerISR() {
   }
 }
 
+unsigned char mirror(unsigned char lsb){
+	unsigned char out;
+	out = lsb & 0x0F;
+	out = out | (lsb & 0x08) << 1;
+	out = out | (lsb & 0x04) << 3;
+	out = out | (lsb & 0x02) << 5;
+	out = out | (lsb & 0x01) << 7;
+	
+	return out;
+}
 
 unsigned char tmpBUL;
 unsigned char t2unlock; //0 = locked    1 = unlocked
@@ -146,17 +157,24 @@ unsigned char tmpBT1;
 unsigned char keyPressed;
 unsigned char p1, p2, p3;
 
+
+
 int main() {
  
 
   DDRA = 0x00; PORTA = 0x03;
   DDRC = 0x0F; PORTC = 0x00;
   unsigned char i=0;
+  tasks[i].state = P2_SMStart;
+  tasks[i].period = periodP2;
+  tasks[i].elapsedTime = tasks[i].period;
+  tasks[i].TickFct = &TickFct_P2;
+  /*
   tasks[i].state = P1_SMStart;
   tasks[i].period = periodP1;
   tasks[i].elapsedTime = tasks[i].period;
   tasks[i].TickFct = &TickFct_P1;
-  /*
+  
   tasks[i].state = KP_SMStart;
   tasks[i].period = periodKP;
   tasks[i].elapsedTime = tasks[i].period;
@@ -285,11 +303,52 @@ int TickFct_P1(int state) {
      default:
 	break;
    } // Transitions
-  transmit_data(p1);
+  //transmit_data(p1);
   return state;
 }
 
 
+
+int TickFct_P2(int state) {
+  static unsigned char base;
+  switch(state) { // Transitions
+     case P2_SMStart: // Initial transition
+        state = P2_init;
+        break;
+     case P2_init:
+	state = P2_inc;
+	break;
+     case P2_inc:
+	if(base==0x0F) state = P2_dec;
+	else state = P2_inc;
+        break;
+     case P2_dec:
+	if(base==0x01) state = P2_inc;
+	else state = P2_dec;
+        break;
+     default:
+        state = P2_SMStart;
+	break;
+   } // Transitions
+  switch(state) { // Actions
+     case P2_SMStart: // Initial transition
+        break;
+     case P2_init:
+	base = 0x01;
+	break;
+     case P2_inc:
+	base = base << 1 | 0x01;
+        break;
+     case P2_dec:
+	base = base >> 1;
+        break;
+     default:
+	break;
+   } // Transitions
+  p2 = mirror(base);
+  transmit_data(p2);
+  return state;
+}
 /*
 int TickFct_Combined(int state) {
   switch(state) { // Transitions
