@@ -82,25 +82,17 @@ typedef struct task {
   int (*TickFct)(int); // Function to call for task's tick
 } task;
 
-task tasks[1];
+task tasks[4];
 
-const unsigned char tasksNum = 1;
+const unsigned char tasksNum = 4;
 
 
 const unsigned long tasksPeriodGCD = 1;
-const unsigned long periodKP = 50;
+const unsigned long periodKP = 100;
 const unsigned long periodP1 = 200;
 const unsigned long periodP2 = 200;
 const unsigned long periodP3 = 200;
-const unsigned long periodIS = 100;
-const unsigned long periodSample = 200;
 
-/*
-const unsigned long periodThreeLEDs = 300;
-unsigned long periodSpeaker = 2;
-const unsigned long periodCombined = 1;
-const unsigned long periodSample = 200;
-*/
 
 enum KP_States { KP_SMStart, KP_wait, KP_inc, KP_dec, KP_reset };
 int TickFct_KP(int state);
@@ -114,25 +106,6 @@ int TickFct_P2(int state);
 enum P3_States { P3_SMStart,P3_init, P3_inc, P3_dec};
 int TickFct_P3(int state);
 
-/*
-enum SQ_States { SQ_SMStart, SQ_init, SQ_begin, SQ_wait, SQ_check, SQ_match };
-int TickFct_detectSQ(int state);
-
-
-enum IS_States { IS_SMStart, IS_unlock, IS_lock };
-int TickFct_IS(int state);
-
-
-enum OnOff_States { OnOff_SMStart, s_Off, s_On};
-int TickFct_OnOff(int state);
-
-enum SP_States { SP_SMStart, SP_s0, SP_s1};
-int TickFct_Speaker(int state);
-
-enum FRQ_States { FRQ_SMStart, FRQ_s0, FRQ_inc, FRQ_dec};
-int TickFct_FRQ(int state);
-
-*/
 
 void TimerISR() {
   unsigned char i;
@@ -170,26 +143,28 @@ int main() {
   DDRA = 0x00; PORTA = 0x03;
   DDRC = 0x0F; PORTC = 0x00;
   unsigned char i=0;
+  tasks[i].state = KP_SMStart;
+  tasks[i].period = periodKP;
+  tasks[i].elapsedTime = tasks[i].period;
+  tasks[i].TickFct = &TickFct_KP;
+  ++i;
   tasks[i].state = P3_SMStart;
   tasks[i].period = periodP3;
   tasks[i].elapsedTime = tasks[i].period;
   tasks[i].TickFct = &TickFct_P3;
-  /*
+  ++i; 
   tasks[i].state = P2_SMStart;
   tasks[i].period = periodP2;
   tasks[i].elapsedTime = tasks[i].period;
   tasks[i].TickFct = &TickFct_P2;
-  
+  ++i;
   tasks[i].state = P1_SMStart;
   tasks[i].period = periodP1;
   tasks[i].elapsedTime = tasks[i].period;
   tasks[i].TickFct = &TickFct_P1;
   
-  tasks[i].state = KP_SMStart;
-  tasks[i].period = periodKP;
-  tasks[i].elapsedTime = tasks[i].period;
-  tasks[i].TickFct = &TickFct_KP;
   
+  /*
   ++i;
   tasks[i].state = SQ_SMStart;
   tasks[i].period = periodSQ;
@@ -223,21 +198,25 @@ int main() {
 int TickFct_KP(int state) {
 
 	unsigned  char tmpA = ~PINA & 0x03;
-	static unsigned  char count;
+	static unsigned  char psl;
+	static unsigned char dOut;
+
   switch(state) { // Transitions
      case KP_SMStart: // Initial transition
         state = KP_wait;
         break;
      case KP_wait:
-	if(tmpA == 1) {
+	if(tmpA == 3) state = KP_reset;
+	else if(tmpA == 1) {
 		state = KP_inc;
-		if(count < 0xFF) count++;
+		if(psl < 0x02) psl++;
+		else psl = 0x00;
 	}
 	else if(tmpA == 2) {
 		state = KP_dec;
-		if(count > 0x00) count--;
+		if(psl > 0x00) psl--;
+		else psl = 2;
 	}
-	else if(tmpA == 3) state = KP_reset;
 	else if(tmpA == 0) state = KP_wait;
         break;
      case KP_inc:
@@ -251,13 +230,20 @@ int TickFct_KP(int state) {
 	else state = KP_wait;
         break;
      case KP_reset:
-	state = KP_wait;
+	state = KP_reset;
+	/*
+	if(tmpA == 0x03) {
+		psl = 3;
+		state = KP_reset;
+	}
+	else state = KP_reset;
+	*/
      default:
         state = KP_SMStart;
-   } // Transitions
+  } // Transitions
   switch(state) { // Actions
      case KP_SMStart: // Initial transition
-        count = 0;
+        psl = 0;
         break;
      case KP_wait:
         break;
@@ -266,14 +252,30 @@ int TickFct_KP(int state) {
      case KP_dec:
         break;
      case KP_reset:
-	count = 0;
+	psl = 3;
 	break;
      default:
         state = KP_SMStart;
 	break;
-	
+
    } // Transitions
-  transmit_data(count);
+  switch(psl){
+	case 0:
+	  dOut = p1;
+	  break;
+	case 1:
+	  dOut = p2;
+	  break;
+	case 2:
+	  dOut = p3;
+	  break;
+	case 3:
+	  dOut = 0;
+	  break;
+	default:
+	  break;
+  }
+  transmit_data(dOut);
   return state;
 }
 
@@ -356,7 +358,7 @@ int TickFct_P2(int state) {
 	break;
    } // Transitions
   p2 = mirror(base);
-  transmit_data(p2);
+  //transmit_data(p2);
   return state;
 }
 
@@ -398,7 +400,7 @@ int TickFct_P3(int state) {
 	break;
    } // Transitions
   p3 = mirror(base);
-  transmit_data(p3);
+  //transmit_data(p3);
   return state;
 }
 /*
