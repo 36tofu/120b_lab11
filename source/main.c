@@ -89,8 +89,9 @@ const unsigned char tasksNum = 1;
 
 const unsigned long tasksPeriodGCD = 1;
 const unsigned long periodKP = 50;
-const unsigned long periodP1 = 100;
-const unsigned long periodP2 = 100;
+const unsigned long periodP1 = 200;
+const unsigned long periodP2 = 200;
+const unsigned long periodP3 = 200;
 const unsigned long periodIS = 100;
 const unsigned long periodSample = 200;
 
@@ -109,6 +110,10 @@ int TickFct_P1(int state);
 
 enum P2_States { P2_SMStart,P2_init, P2_inc, P2_dec};
 int TickFct_P2(int state);
+
+enum P3_States { P3_SMStart,P3_init, P3_inc, P3_dec};
+int TickFct_P3(int state);
+
 /*
 enum SQ_States { SQ_SMStart, SQ_init, SQ_begin, SQ_wait, SQ_check, SQ_match };
 int TickFct_detectSQ(int state);
@@ -165,11 +170,16 @@ int main() {
   DDRA = 0x00; PORTA = 0x03;
   DDRC = 0x0F; PORTC = 0x00;
   unsigned char i=0;
+  tasks[i].state = P3_SMStart;
+  tasks[i].period = periodP3;
+  tasks[i].elapsedTime = tasks[i].period;
+  tasks[i].TickFct = &TickFct_P3;
+  /*
   tasks[i].state = P2_SMStart;
   tasks[i].period = periodP2;
   tasks[i].elapsedTime = tasks[i].period;
   tasks[i].TickFct = &TickFct_P2;
-  /*
+  
   tasks[i].state = P1_SMStart;
   tasks[i].period = periodP1;
   tasks[i].elapsedTime = tasks[i].period;
@@ -347,6 +357,48 @@ int TickFct_P2(int state) {
    } // Transitions
   p2 = mirror(base);
   transmit_data(p2);
+  return state;
+}
+
+
+int TickFct_P3(int state) {
+  static unsigned char base;
+  switch(state) { // Transitions
+     case P3_SMStart: // Initial transition
+        state = P3_init;
+        break;
+     case P3_init:
+	state = P3_inc;
+	break;
+     case P3_inc:
+	if(base==0x0F) state = P3_dec;
+	else state = P3_inc;
+        break;
+     case P3_dec:
+	if(base==0x01) state = P3_inc;
+	else state = P3_dec;
+        break;
+     default:
+        state = P3_SMStart;
+	break;
+   } // Transitions
+  switch(state) { // Actions
+     case P3_SMStart: // Initial transition
+        break;
+     case P3_init:
+	base = 0x01;
+	break;
+     case P3_inc:
+	base++;
+        break;
+     case P3_dec:
+	base--;
+        break;
+     default:
+	break;
+   } // Transitions
+  p3 = mirror(base);
+  transmit_data(p3);
   return state;
 }
 /*
